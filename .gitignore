@@ -1,0 +1,20 @@
+# Restored dependencies and build/test output.
+/packages/
+/artifacts/
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+
+# Runtime diagnostics and local credentials/certificates.
+logs/
+logs.txt
+*.jsonl
+*.log
+*.pfx
+*.hisuite-proxy.original
+
+# Preview inputs are machine-local; use the documented schema.
+fixed-offer-preview.json
+initial-state.json

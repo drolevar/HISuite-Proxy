@@ -1,0 +1,69 @@
+{
+  "status": "0",
+  "versionPackageCheckResults": [
+    {
+      "status": "0",
+      "autoPollingCycle": "1",
+      "versionPackageType": 2,
+      "components": [
+        {
+          "versionID": "401403",
+          "version": "BLA-LGRP2-OVS 9.1.0.345",
+          "name": "BLA-LGRP2-OVS 9.1.0.345",
+          "pointVersion": "0",
+          "versionType": "1",
+          "url": "https://update.dbankcdn.com/download/data/pub_13/HWHOTA_hotaMigrate_900_9/73/v3/38886962e86740678df2885e5fd8a541/",
+          "createTime": "2020-04-02T09:02:39+02:00",
+          "componentID": 1,
+          "description": "",
+          "reserveUrl": "updatessl.dbankcdn.com",
+          "ruleAttr": ""
+        }
+      ],
+      "checkEnd": "1"
+    },
+    {
+      "status": "0",
+      "autoPollingCycle": "1",
+      "components": [
+        {
+          "componentID": 1,
+          "createTime": "2020-04-02T08:33:41+02:00",
+          "description": "",
+          "name": "BLA-L29-CUST 9.1.0.6(C432)",
+          "pointVersion": "0",
+          "reserveUrl": "updatessl.dbankcdn.com",
+          "ruleAttr": "",
+          "versionType": "1",
+          "url": "https://update.dbankcdn.com/download/data/pub_13/HWHOTA_hotaMigrate_900_9/a0/v3/51a0cd12010744779075e7e89e90e960/",
+          "version": "BLA-L29-CUST 9.1.0.6(C432)",
+          "versionID": "401404"
+        }
+      ],
+      "versionPackageType": 3,
+      "checkEnd": "1"
+    },
+    {
+      "status": "0",
+      "autoPollingCycle": "1",
+      "components": [
+        {
+          "componentID": 1,
+          "createTime": "2020-04-02T08:33:41+02:00",
+          "description": "",
+          "name": "BLA-L29-PRELOAD 9.1.0.12(C432R1)",
+          "pointVersion": "0",
+          "reserveUrl": "updatessl.dbankcdn.com",
+          "ruleAttr": "",
+          "url": "https://update.dbankcdn.com/download/data/pub_13/HWHOTA_hotaMigrate_900_9/76/v3/92a1959e850f4748bc37cff9013d6796/",
+          "versionType": "1",
+          "version": "BLA-L29-PRELOAD 9.1.0.12(C432R1)",
+          "versionID": "386376"
+        }
+      ],
+      "versionPackageType": 4,
+      "checkEnd": "1"
+    }
+  ],
+  "authorizeResult": ""
+}

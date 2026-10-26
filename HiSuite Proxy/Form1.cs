@@ -12,6 +12,7 @@ using System.IO;
 using System.Net.Security;
 using System.Security.Cryptography;
 using System.IO.Compression;
+using ProxyDiagnostics;
 
 namespace HiSuite_Proxy
 {
@@ -64,6 +65,10 @@ namespace HiSuite_Proxy
                 return;
             }
             InitializeComponent();
+            if (Environment.GetEnvironmentVariable("HISUITE_PROXY_FIXED_OFFER_PREVIEW") == "1")
+                Text = "HiSuite Proxy - METADATA PREVIEW - downloads blocked";
+            Log.Event("session.entry", "Proxy source build with redacted file diagnostics.");
+            Log.Checkpoint(this, "ui.ready");
 
             textBox8.TextAlign = HorizontalAlignment.Center;
 
@@ -90,8 +95,8 @@ namespace HiSuite_Proxy
                 proxyserver.CertificateManager.TrustRootCertificate(true);
 
                 proxyserver.ServerCertificateValidationCallback += Proxyserver_ServerCertificateValidationCallback;
-                proxyserver.BeforeRequest += Proxyserver_BeforeRequest;
-                proxyserver.BeforeResponse += Proxyserver_BeforeResponse;
+                proxyserver.BeforeRequest += DiagnosticsBeforeRequest;
+                proxyserver.BeforeResponse += DiagnosticsBeforeResponse;
 
                 proxyserver.AddEndPoint(endpoint);
                 
@@ -99,6 +104,7 @@ namespace HiSuite_Proxy
             }
             catch (Exception ex)
             {
+                Log.ObserveException("proxy.start.failed", ex);
                 textBox3.AppendText(ex.StackTrace);
                 //MessageBox.Show(ex.Message, "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
@@ -159,21 +165,33 @@ namespace HiSuite_Proxy
             };
         }
 
+        private sealed class RequestDiagnosticsContext
+        {
+            public Form1 form;
+            public Titanium.Web.Proxy.EventArguments.SessionEventArgs e;
+        }
+
+        private Task DiagnosticsBeforeRequest(object sender, Titanium.Web.Proxy.EventArguments.SessionEventArgs e)
+        {
+            Log.Checkpoint(new RequestDiagnosticsContext { form = this, e = e }, "request.handler.begin");
+            return TitaniumHooks.AfterRequest(FixedOfferPreview.Dispatch(this, sender, e), e);
+        }
+
+        private Task DiagnosticsBeforeResponse(object sender, Titanium.Web.Proxy.EventArguments.SessionEventArgs e)
+        {
+            return TitaniumHooks.AfterResponse(Proxyserver_BeforeResponse(sender, e), e);
+        }
+
         private async Task Proxyserver_BeforeResponse(object sender, Titanium.Web.Proxy.EventArguments.SessionEventArgs e)
         {
             string reqeustURL = e.HttpClient.Request.Url;
 
-            if (reqeustURL.Contains("filelist.xml"))
+            if (reqeustURL.Contains("filelist.xml") &&
+                (_customData.LocalBase || _customData.LocalCust || _customData.LocalPreload))
             {
-                string basefirm = textBox1.Text, custfirm = textBox7.Text, preloadfirm = textBox4.Text;
-                basefirm = basefirm.Substring(basefirm.IndexOf("TDS"));
-                custfirm = custfirm.Substring(custfirm.IndexOf("TDS"));
-                preloadfirm = preloadfirm.Substring(preloadfirm.IndexOf("TDS"));
-
-                string tempurl = reqeustURL.Substring(reqeustURL.IndexOf("TDS"));
-                if (_customData.LocalBase && tempurl.Contains(basefirm))
+                if (_customData.LocalBase && FirmwarePaths.MatchesRequest(reqeustURL, textBox1.Text))
                 {
-                    string response = await e.GetResponseBodyAsString();
+                    string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
                     int where = response.IndexOf("package=");
                     if (where == -1)
                     {
@@ -186,9 +204,9 @@ namespace HiSuite_Proxy
                         CopyFile(textBox2.Text, _customData.LocalBaseDir, response.Substring(where, finish - where), 0);
                     }
                 }
-                else if (_customData.LocalCust && tempurl.Contains(custfirm))
+                else if (_customData.LocalCust && FirmwarePaths.MatchesRequest(reqeustURL, textBox7.Text))
                 {
-                    string response = await e.GetResponseBodyAsString();
+                    string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
                     int where = response.IndexOf("package=");
                     if (where == -1)
                     {
@@ -201,9 +219,9 @@ namespace HiSuite_Proxy
                         CopyFile(textBox6.Text, _customData.LocalCustDir, response.Substring(where, finish - where), 1);
                     }
                 }
-                else if (_customData.LocalPreload && tempurl.Contains(preloadfirm))
+                else if (_customData.LocalPreload && FirmwarePaths.MatchesRequest(reqeustURL, textBox4.Text))
                 {
-                    string response = await e.GetResponseBodyAsString();
+                    string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
                     int where = response.IndexOf("package=");
                     if (where == -1)
                     {
@@ -254,7 +272,7 @@ namespace HiSuite_Proxy
                 string reqeustURL = e.HttpClient.Request.Url;
                 if (reqeustURL.EndsWith(":7777/getFile.txt"))
                 {
-                    string Body = await e.GetRequestBodyAsString();
+                    string Body = await TitaniumHooks.GetRequestBodyAsString(e, CancellationToken.None);
                     RomDetails.gZipWebClient client = new RomDetails.gZipWebClient();
                     string responseBody = "";
                     try
@@ -268,11 +286,11 @@ namespace HiSuite_Proxy
                     Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                     Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
                     Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                    e.Ok(responseBody, Headers);
+                    TitaniumHooks.Ok(e, responseBody, Headers);
                 }
                 else if (reqeustURL.EndsWith(":7777/checkRom.txt"))
                 {
-                    string Body = await e.GetRequestBodyAsString();
+                    string Body = await TitaniumHooks.GetRequestBodyAsString(e, CancellationToken.None);
                     Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                     Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
                     Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
@@ -288,18 +306,18 @@ namespace HiSuite_Proxy
                     }
                     if (isapprovedForInstallation)
                     {
-                        e.Ok("YES", Headers);
+                        TitaniumHooks.Ok(e, "YES", Headers);
                     }
                     else
                     {
-                        e.Ok("NO", Headers);
+                        TitaniumHooks.Ok(e, "NO", Headers);
                     }
                 }
                 else if (reqeustURL.EndsWith(":7777/addROM.txt"))
                 {
                     if(e.HttpClient.Request.HasBody)
                     {
-                        string Body = await e.GetRequestBodyAsString();
+                        string Body = await TitaniumHooks.GetRequestBodyAsString(e, CancellationToken.None);
                         string[] BodyData = Body.Split('|');
                         if(BodyData.Length > 2)
                         {
@@ -314,7 +332,7 @@ namespace HiSuite_Proxy
                                 Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                                 Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
                                 Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                                e.Ok("OK", Headers);
+                                TitaniumHooks.Ok(e, "OK", Headers);
                             }
                             else if (BodyData[1].Contains("-CUST "))
                             {
@@ -327,7 +345,7 @@ namespace HiSuite_Proxy
                                 Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                                 Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
                                 Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                                e.Ok("OK", Headers);
+                                TitaniumHooks.Ok(e, "OK", Headers);
                             }
                             else
                             {
@@ -339,7 +357,7 @@ namespace HiSuite_Proxy
                                 Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                                 Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
                                 Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                                e.Ok("OK", Headers);
+                                TitaniumHooks.Ok(e, "OK", Headers);
                             }
                         }
                         else
@@ -347,7 +365,7 @@ namespace HiSuite_Proxy
                             Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                             Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
                             Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                            e.Ok("ERROR", Headers);
+                            TitaniumHooks.Ok(e, "ERROR", Headers);
                         }
                     }
                     else
@@ -355,7 +373,7 @@ namespace HiSuite_Proxy
                         Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                         Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
                         Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                        e.Ok("ERROR", Headers);
+                        TitaniumHooks.Ok(e, "ERROR", Headers);
                     }
                     return;
                 }
@@ -375,7 +393,7 @@ namespace HiSuite_Proxy
                         }
                         if (e.HttpClient.Request.HasBody)
                         {
-                            debug += Environment.NewLine + await e.GetRequestBodyAsString();
+                            debug += Environment.NewLine + await TitaniumHooks.GetRequestBodyAsString(e, CancellationToken.None);
                         }
                         debug += Environment.NewLine + Environment.NewLine;
                         File.AppendAllText("logs.txt", debug);
@@ -383,7 +401,7 @@ namespace HiSuite_Proxy
                 }
                 if (reqeustURL.Contains("checkHiSuiteConnection"))
                 {
-                    e.Ok("Success");
+                    TitaniumHooks.Ok(e, "Success");
                 }
                 else if (reqeustURL.Contains("query.hicloud.com"))
                 {
@@ -391,11 +409,11 @@ namespace HiSuite_Proxy
                     {
                         Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                         Headers.Add("Content-Type", new HttpHeader("Content-Type", "application/xml;charset=UTF-8"));
-                        e.Ok("<?xml version=\"1.0\" encoding=\"UTF-8\"?><root><status>1</status></root>", Headers, true);
+                        TitaniumHooks.Ok(e, "<?xml version=\"1.0\" encoding=\"UTF-8\"?><root><status>1</status></root>", Headers, true);
                     }
                     else if (reqeustURL.Contains("CouplingReport.action"))
                     {
-                        string resbody = await e.GetRequestBodyAsString();
+                        string resbody = await TitaniumHooks.GetRequestBodyAsString(e, CancellationToken.None);
                         int where = resbody.IndexOf("descinfo");
                         if (where != -1)
                         {
@@ -412,7 +430,7 @@ namespace HiSuite_Proxy
                         WebClient client = new WebClient();
                         client.Headers.Set(HttpRequestHeader.Accept, "*/*");
                         client.Headers.Set(HttpRequestHeader.ContentType, "application/json;charset=UTF-8");
-                        string updata = await e.GetRequestBodyAsString();
+                        string updata = await TitaniumHooks.GetRequestBodyAsString(e, CancellationToken.None);
                         string respons = "0";
                         bool forceAuthBridge = checkBox7.Checked;
                         if (forceAuthBridge)
@@ -457,7 +475,7 @@ namespace HiSuite_Proxy
                         {
                             try
                             {
-                                respons = client.UploadString("https://query.hicloud.com:443/sp_ard_common/v1/authorize.action", updata);
+                                respons = Log.UploadString(client, "https://query.hicloud.com:443/sp_ard_common/v1/authorize.action", updata);
                             }
                             catch (Exception ex)
                             {
@@ -483,11 +501,11 @@ namespace HiSuite_Proxy
                                 respons = "";
                             }
                         }
-                        e.Ok(respons, Headers);
+                        TitaniumHooks.Ok(e, respons, Headers);
                     }
                     else if (e.HttpClient.Request.HasBody)
                     {
-                        string bodydata = await e.GetRequestBodyAsString();
+                        string bodydata = await TitaniumHooks.GetRequestBodyAsString(e, CancellationToken.None);
                         int whereisit = bodydata.IndexOf("PackageType");
                         if (whereisit != -1)
                         {
@@ -667,37 +685,26 @@ namespace HiSuite_Proxy
                                 }
                                 Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                                 Headers.Add("Content-Type", new HttpHeader("Content-Type", "application/json;charset=utf8"));
-                                e.Ok(responsedata, Headers, true);
+                                TitaniumHooks.Ok(e, responsedata, Headers, true);
                             }
                             else
                             {
                                 string responsedata = Encoding.UTF8.GetString(Properties.Resources.emptyresponse).Replace("\r\n", "");
                                 Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                                 Headers.Add("Content-Type", new HttpHeader("Content-Type", "application/json;charset=utf8"));
-                                e.Ok(responsedata, Headers, true);
+                                TitaniumHooks.Ok(e, responsedata, Headers, true);
                             }
                         }
                     }
                 }
-                else if (reqeustURL.Contains("update.dbankcdn.com") && reqeustURL.Contains("/TDS/data/files"))
+                else if (reqeustURL.Contains("update.dbankcdn.com") &&
+                    ((basePKGData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox1.Text)) ||
+                     (custPKGData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox7.Text)) ||
+                     (preloadPGKData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox4.Text))))
                 {
                     if (reqeustURL.EndsWith("filelist.xml"))
                     {
-                        string
-                            requestVersion = GetURLVersion(reqeustURL),
-                            baseVersionn = GetURLVersion(textBox1.Text, 0),
-                            custVersionn = GetURLVersion(textBox7.Text, 1),
-                            preloadVersionn = GetURLVersion(textBox4.Text, 2);
-
-                        /*if (_customData.CustomBase)
-                            baseVersionn = _customData.CustomBaseID;
-
-                        if (_customData.CustomCust)
-                            custVersionn = _customData.CustomCustID;
-
-                        if (_customData.CustomPreload)
-                            custVersionn = _customData.CustomPreloadID;*/
-                        if (requestVersion == baseVersionn && basePKGData != null)
+                        if (basePKGData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox1.Text))
                         {
                             string responsefile = Properties.Resources.filelist.Replace("changelog", "changelog_base");
                             responsefile = responsefile.Replace("firmkind", "base");
@@ -710,9 +717,9 @@ namespace HiSuite_Proxy
                             Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                             Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/xml"));
 
-                            e.Ok(responsefile, Headers, true);
+                            TitaniumHooks.Ok(e, responsefile, Headers, true);
                         }
-                        else if (requestVersion == custVersionn && custPKGData != null)
+                        else if (custPKGData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox7.Text))
                         {
                             string responsefile = Properties.Resources.filelist;
                             responsefile = responsefile.Replace("firmkind", "cust");
@@ -725,9 +732,9 @@ namespace HiSuite_Proxy
                             Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                             Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/xml"));
 
-                            e.Ok(responsefile, Headers, true);
+                            TitaniumHooks.Ok(e, responsefile, Headers, true);
                         }
-                        else if (requestVersion == preloadVersionn && preloadPGKData != null)
+                        else if (preloadPGKData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox4.Text))
                         {
                             string responsefile = Properties.Resources.filelist;
                             responsefile = responsefile.Replace("firmkind", "preload");
@@ -740,7 +747,7 @@ namespace HiSuite_Proxy
                             Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                             Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/xml"));
 
-                            e.Ok(responsefile, Headers, true);
+                            TitaniumHooks.Ok(e, responsefile, Headers, true);
                         }
                     }
                     else if (reqeustURL.EndsWith("changelog_base.xml") || reqeustURL.EndsWith("changelog.xml"))
@@ -748,13 +755,14 @@ namespace HiSuite_Proxy
                         Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                         Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/xml"));
 
-                        e.Ok(Properties.Resources.changelog, Headers, true);
+                        TitaniumHooks.Ok(e, Properties.Resources.changelog, Headers, true);
                     }
                 }
                 
             }
             catch (Exception ex)
             {
+                Log.ObserveException("request.handler.caught", ex);
                 this.Invoke(new Action(() =>
                 {
                     textBox3.AppendText(ex.StackTrace + Environment.NewLine);
@@ -823,8 +831,33 @@ namespace HiSuite_Proxy
                 Patch(dialog.FileName);
             }
         }
+        public string LastPatchError { get; private set; }
+
         public bool Patch(string filename, bool systemadmin = false)
         {
+            LastPatchError = null;
+            try
+            {
+                string directory = Path.GetDirectoryName(Path.GetFullPath(filename));
+                string runInfo = Path.Combine(directory, "RunInfo.ini");
+                if (File.Exists(runInfo) && Array.Exists(File.ReadAllLines(runInfo),
+                    line => line.Trim().StartsWith("version=14.", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (!Path.GetFileName(filename).Equals("httpcomponent.dll", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Select httpcomponent.dll from the HiSuite directory.");
+                    HiSuite14PatchStatus status = HiSuite14Patcher.Apply(directory);
+                    if (!systemadmin)
+                        MessageBox.Show(status.Message, "HiSuite 14", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return status.IsSupported;
+                }
+            }
+            catch (Exception error)
+            {
+                LastPatchError = error.Message;
+                if (!systemadmin)
+                    MessageBox.Show(error.Message, "HiSuite 14 patch", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
 
             byte[] finddata = new byte[] { 0x6A, 0x00, 0x6A, 0x01, 0x51, 0xFF, 0x15, 0xC4, 0x32, 0x01, 0x10 }, replacedata = new byte[] { 0x6A, 0x00, 0x6A, 0x00, 0x51, 0xFF, 0x15, 0xC4, 0x32, 0x01, 0x10 };
             bool newHiSuite = false;

@@ -70,6 +70,18 @@ namespace HiSuite_Proxy
             {
                 AppendMessage("HiSuite Exists, Proceeding...", GreenColor);
 
+                string runInfoPath = Path.Combine(hisuitedir, "RunInfo.ini");
+                if (File.Exists(runInfoPath) && Array.Exists(File.ReadAllLines(runInfoPath),
+                    line => line.Trim().StartsWith("version=14.", StringComparison.OrdinalIgnoreCase)))
+                {
+                    HiSuite14PatchStatus status = HiSuite14Patcher.Inspect(hisuitedir);
+                    if (!status.IsSupported)
+                    {
+                        AppendMessage(status.Message, RedColor);
+                        return;
+                    }
+                }
+
                 bool Closed = false;
                 Process[] hisuiteopen = Process.GetProcesses();
                 foreach(Process proc in hisuiteopen)
@@ -134,6 +146,8 @@ namespace HiSuite_Proxy
                 else
                 {
                     AppendMessage("Patch failed, Aborting process....", RedColor);
+                    if (!string.IsNullOrEmpty(form.LastPatchError))
+                        AppendMessage(form.LastPatchError, RedColor);
                     AppendMessage("Please Contact Developer If Error Continues", RedColor);
                     AppendMessage("https://github.com/ProfessorJTJ/HISuite-Proxy/issues", GreenColor);
                 }
