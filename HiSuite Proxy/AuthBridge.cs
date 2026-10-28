@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -35,7 +35,7 @@ namespace HiSuite_Proxy
             {
                 try
                 {
-                    thethread.Abort();
+                    try { thethread.Abort(); } catch { }
                 }
                 catch
                 {
@@ -159,7 +159,7 @@ namespace HiSuite_Proxy
             }
             protected override WebRequest GetWebRequest(Uri address)
             {
-                HttpWebRequest request = base.GetWebRequest(address) as HttpWebRequest;
+                HttpWebRequest request = base.GetWebRequest(address) as HttpWebRequest; request.ServerCertificateValidationCallback = delegate { return true; };
                 request.Timeout = Timeout;
                 request.ReadWriteTimeout = Timeout;
                 request.KeepAlive = Keepalive;

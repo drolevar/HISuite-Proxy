@@ -116,7 +116,7 @@ namespace HiSuite_Proxy
                 {
                     if(!Finished)
                     {
-                        thisthread.Abort();
+                        try { thisthread.Abort(); } catch { }
                     }
                 };
                 progress.Show(form);
@@ -306,7 +306,7 @@ namespace HiSuite_Proxy
             }
             protected override WebRequest GetWebRequest(Uri address)
             {
-                HttpWebRequest request = base.GetWebRequest(address) as HttpWebRequest;
+                HttpWebRequest request = base.GetWebRequest(address) as HttpWebRequest; request.ServerCertificateValidationCallback = delegate { return true; };
                 request.Timeout = Timeout;
                 request.ReadWriteTimeout = Timeout;
                 request.KeepAlive = Keepalive;

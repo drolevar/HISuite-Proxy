@@ -76,7 +76,7 @@ namespace HiSuite_Proxy
 
             firmFinder = new FirmFinder(this);
 
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+            try { ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 | SecurityProtocolType.Tls13; } catch { }
             ServicePointManager.ServerCertificateValidationCallback += new RemoteCertificateValidationCallback(delegate { return true; });
 
             this.FormClosing += delegate
@@ -967,7 +967,7 @@ namespace HiSuite_Proxy
                 };
                 string updata = payload.ToString(Formatting.None);
                 byte[] requestBytes = Encoding.UTF8.GetBytes(updata);
-                HttpWebRequest http = (HttpWebRequest)WebRequest.Create("https://query.hicloud.com/sp_ard_common/v1/authorize.action");
+                HttpWebRequest http = (HttpWebRequest)WebRequest.Create("https://query.hicloud.com/sp_ard_common/v1/authorize.action"); http.ServerCertificateValidationCallback = delegate { return true; };
                 http.Proxy = null;
                 http.Method = "POST";
                 http.ContentType = "application/json;charset=UTF-8";
@@ -1384,7 +1384,7 @@ namespace HiSuite_Proxy
                     }
                     if (!finished)
                     {
-                        CopyThread.Abort();
+                        try { CopyThread.Abort(); } catch { }
                     }
                 };
                 CopyThread.Start();
@@ -1475,10 +1475,11 @@ namespace HiSuite_Proxy
 
         private void CreateShortcut(string Source)
         {
-            object shDesktop = (object)"Desktop";
-            IWshRuntimeLibrary.WshShell shell = new IWshRuntimeLibrary.WshShell();
-            string shortcutAddress = (string)shell.SpecialFolders.Item(ref shDesktop) + @"\HISuite 11.lnk";
-            IWshRuntimeLibrary.IWshShortcut shortcut = (IWshRuntimeLibrary.IWshShortcut)shell.CreateShortcut(shortcutAddress);
+            Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+            if (shellType == null) return;
+            dynamic shell = Activator.CreateInstance(shellType);
+            string shortcutAddress = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "HISuite 11.lnk");
+            dynamic shortcut = shell.CreateShortcut(shortcutAddress);
             shortcut.IconLocation = AppDomain.CurrentDomain.BaseDirectory + "icon.ico";
             shortcut.Description = "Patched HISuite 11";
             shortcut.TargetPath = Source;
