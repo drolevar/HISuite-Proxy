@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
@@ -94,7 +94,7 @@ namespace HiSuite_Proxy
             try
             {
                 proxyserver.CertificateManager.CreateRootCertificate(true);
-                proxyserver.CertificateManager.TrustRootCertificate(true);
+                try { proxyserver.CertificateManager.TrustRootCertificate(true); } catch { try { proxyserver.CertificateManager.TrustRootCertificate(false); } catch { } }
 
                 proxyserver.ServerCertificateValidationCallback += Proxyserver_ServerCertificateValidationCallback;
                 proxyserver.BeforeRequest += DiagnosticsBeforeRequest;
