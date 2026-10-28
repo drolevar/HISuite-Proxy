@@ -536,6 +536,21 @@ namespace HiSuite_Proxy
                             try
                             {
                                 respons = Log.UploadString(client, "https://query.hicloud.com:443/sp_ard_common/v1/authorize.action", updata);
+                                if (!String.IsNullOrEmpty(respons) && ResponseHasRejectedStatus(respons))
+                                {
+                                    string baseOnlyUpdata = TryBuildBaseOnlyAuthorizePayload(updata);
+                                    if (!String.IsNullOrEmpty(baseOnlyUpdata))
+                                    {
+                                        client.Headers.Set(HttpRequestHeader.Accept, "*/*");
+                                        client.Headers.Set(HttpRequestHeader.ContentType, "application/json;charset=UTF-8");
+                                        string retryRespons = Log.UploadString(client, "https://query.hicloud.com:443/sp_ard_common/v1/authorize.action", baseOnlyUpdata);
+                                        if (!String.IsNullOrEmpty(retryRespons) && !ResponseHasRejectedStatus(retryRespons))
+                                        {
+                                            updata = baseOnlyUpdata;
+                                            respons = retryRespons;
+                                        }
+                                    }
+                                }
                             }
                             catch (Exception ex)
                             {
@@ -1643,6 +1658,34 @@ namespace HiSuite_Proxy
                 MessageBox.Show(e.Message, "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+        private static bool ResponseHasRejectedStatus(string response)
+        {
+            try
+            {
+                int where = response.IndexOf("data=", StringComparison.Ordinal);
+                if (where == -1) return false;
+                where += 5;
+                int finish = response.IndexOf('&', where);
+                string b64 = finish != -1 ? response.Substring(where, finish - where) : response.Substring(where);
+                string decoded = Encoding.UTF8.GetString(Convert.FromBase64String(b64));
+                return decoded.Contains("\"status\":\"1\"") || decoded.Contains("\"status\":\"2\"");
+            }
+            catch { return false; }
+        }
+
+        private static string TryBuildBaseOnlyAuthorizePayload(string updata)
+        {
+            try
+            {
+                JObject obj = JObject.Parse(updata);
+                JArray versions = obj["version"] as JArray;
+                if (versions == null || versions.Count <= 1) return null;
+                obj["version"] = new JArray(versions[0]);
+                return obj.ToString(Formatting.None);
+            }
+            catch { return null; }
+        }
+
         private bool CheckAuthentication(string phonedata, string response)
         {
             try
