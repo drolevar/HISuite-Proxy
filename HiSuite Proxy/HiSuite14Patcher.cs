@@ -93,33 +93,82 @@ namespace HiSuite_Proxy
         {
             DirectoryState state = ReadDirectory(directory);
             ValidateBackups(state, state.State == HiSuite14PatchState.Patched);
-            if (state.State == HiSuite14PatchState.Patched) return state.Status();
-            EnsureBackups(state);
-            List<byte[]> patched = new List<byte[]>();
-            for (int i = 0; i < Files.Length; i++)
+            if (state.State != HiSuite14PatchState.Patched)
             {
-                byte[] bytes = (byte[])state.Bytes[i].Clone();
-                for (int j = 0; j < Files[i].Offsets.Length; j++)
+                EnsureBackups(state);
+                List<byte[]> patched = new List<byte[]>();
+                for (int i = 0; i < Files.Length; i++)
                 {
-                    int offset = Files[i].Offsets[j];
-                    if (bytes[offset] != Files[i].OldValues[j]) throw new InvalidOperationException("The verified patch profile is inconsistent for " + Files[i].Name + ".");
-                    bytes[offset] = Files[i].NewValues[j];
+                    byte[] bytes = (byte[])state.Bytes[i].Clone();
+                    for (int j = 0; j < Files[i].Offsets.Length; j++)
+                    {
+                        int offset = Files[i].Offsets[j];
+                        if (bytes[offset] != Files[i].OldValues[j]) throw new InvalidOperationException("The verified patch profile is inconsistent for " + Files[i].Name + ".");
+                        bytes[offset] = Files[i].NewValues[j];
+                    }
+                    if (Hash(bytes) != Files[i].PatchedHash) throw new InvalidOperationException("The patched hash does not match the profile for " + Files[i].Name + ".");
+                    patched.Add(bytes);
                 }
-                if (Hash(bytes) != Files[i].PatchedHash) throw new InvalidOperationException("The patched hash does not match the profile for " + Files[i].Name + ".");
-                patched.Add(bytes);
+                ReplaceFiles(state, patched, HiSuite14PatchState.Patched);
             }
-            ReplaceFiles(state, patched, HiSuite14PatchState.Patched);
+            ApplyOptionalFirmwareUpdatePatch(state.Directory);
             return ReadDirectory(state.Directory).Status();
+        }
+
+        private static void ApplyOptionalFirmwareUpdatePatch(string directory)
+        {
+            // Patch FirmwareUpdate.dll (14.0.0.380) at file offset 0x1AA1D (RVA 0x0001B61D: 0x75 -> 0xEB)
+            // so USB Update Mode / Recovery OS skips UpdateAuth and flashes UPDATE.APP directly.
+            const string origFwHash = "4d9684629001460b6d0ec0543b2a5590cce9240bcef6d23033ab1313f47ee42c";
+            const int fwOffset = 0x1AA1D;
+            string fwPath = Path.Combine(directory, "FirmwareUpdate.dll");
+            if (!PathExists(fwPath)) return;
+            byte[] fwBytes = ReadRegularFile(fwPath);
+            if (fwBytes.Length > fwOffset && fwBytes[fwOffset] == 0x75 && Hash(fwBytes) == origFwHash)
+            {
+                string backupPath = fwPath + BackupSuffix;
+                if (!PathExists(backupPath)) WriteNew(backupPath, fwBytes);
+                byte[] patchedFw = (byte[])fwBytes.Clone();
+                patchedFw[fwOffset] = 0xEB;
+                string tmpPath = fwPath + ".hisuiteproxy-" + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    WriteNew(tmpPath, patchedFw);
+                    File.Replace(tmpPath, fwPath, null);
+                }
+                finally
+                {
+                    if (File.Exists(tmpPath)) File.Delete(tmpPath);
+                }
+            }
         }
 
         public static HiSuite14PatchStatus Restore(string directory)
         {
             DirectoryState state = ReadDirectory(directory);
             ValidateBackups(state, state.State == HiSuite14PatchState.Patched);
-            if (state.State == HiSuite14PatchState.Original) return state.Status();
-            List<byte[]> original = new List<byte[]>();
-            foreach (FilePatch file in Files) original.Add(ReadRegularFile(Path.Combine(state.Directory, file.Name + BackupSuffix)));
-            ReplaceFiles(state, original, HiSuite14PatchState.Original);
+            if (state.State != HiSuite14PatchState.Original)
+            {
+                List<byte[]> original = new List<byte[]>();
+                foreach (FilePatch file in Files) original.Add(ReadRegularFile(Path.Combine(state.Directory, file.Name + BackupSuffix)));
+                ReplaceFiles(state, original, HiSuite14PatchState.Original);
+            }
+            string fwPath = Path.Combine(state.Directory, "FirmwareUpdate.dll");
+            string fwBackup = fwPath + BackupSuffix;
+            if (PathExists(fwPath) && PathExists(fwBackup))
+            {
+                byte[] origFw = ReadRegularFile(fwBackup);
+                string tmpPath = fwPath + ".hisuiteproxy-" + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    WriteNew(tmpPath, origFw);
+                    File.Replace(tmpPath, fwPath, null);
+                }
+                finally
+                {
+                    if (File.Exists(tmpPath)) File.Delete(tmpPath);
+                }
+            }
             return ReadDirectory(state.Directory).Status();
         }
 
