@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -16,6 +16,7 @@ namespace HiSuite_Proxy
 {
     public partial class SetUP : Form
     {
+        public const string OfficialHiSuite14DownloadUrl = "https://consumer-tkb.huawei.com/weknow/servlet/download/public?contextNo=W00018218";
         private string HISuiteVersion = null;
         private Color GreenColor = Color.FromArgb(0, 204, 0), RedColor = Color.FromArgb(230, 46, 0), OrangeColor = Color.FromArgb(255, 175, 26);
         Form1 form;
@@ -113,9 +114,13 @@ namespace HiSuite_Proxy
                         int versionparse = int.Parse(data.Substring(whereisit, finish - whereisit));
                         if(versionparse < 10)
                         {
-                            AppendMessage("HiSuite Version Isn't Supported, Please Download Latest Version....", RedColor);
-                            AppendMessage("https://consumer.huawei.com/en/support/hisuite/", GreenColor);
+                            AppendMessage("HiSuite Version Isn't Supported, Please Download HiSuite " + HiSuite14Patcher.SupportedVersion + "....", RedColor);
+                            AppendMessage(OfficialHiSuite14DownloadUrl, GreenColor);
                             return;
+                        }
+                        else if (HISuiteVersion.IndexOf("version=14.", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            AppendMessage("HiSuite Version " + HiSuite14Patcher.SupportedVersion + " Is Installed, Proceeding....", GreenColor);
                         }
                         else
                         {
@@ -154,8 +159,8 @@ namespace HiSuite_Proxy
             }
             else
             {
-                AppendMessage("HiSuite Is not installed, Aborting process....", RedColor);
-                Process.Start("https://consumer.huawei.com/en/support/hisuite/");
+                AppendMessage("HiSuite Is not installed, Downloading HiSuite " + HiSuite14Patcher.SupportedVersion + "....", RedColor);
+                Process.Start(OfficialHiSuite14DownloadUrl);
             }
         }
         private void SetProxySettings()
@@ -313,7 +318,13 @@ namespace HiSuite_Proxy
             AppendMessage("", GreenColor);
             AppendMessage("Checks Finished, You can proceed to installation now!", GreenColor);
 
-            if (HISuiteVersion.Contains("version=11.0.0.510"))
+            if (HISuiteVersion != null && HISuiteVersion.IndexOf("version=14.", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                AppendMessage("HiSuite " + HiSuite14Patcher.SupportedVersion + " (HiSuite.exe) is patched in-place with .hisuite-proxy.original backups.", OrangeColor);
+                AppendMessage("Launch HiSuite 14 via start-hisuite14.ps1 so update/rollback HTTPS traffic routes through 127.0.0.1:7777.", OrangeColor);
+                AppendMessage("If your phone doesn't connect, enable 'USB Debugging' and 'Allow HiSuite to use HDB'.", OrangeColor);
+            }
+            else if (HISuiteVersion != null && HISuiteVersion.Contains("version=11.0.0.510"))
             {
                 AppendMessage("Use HISuite 11.exe instead of your older file...", OrangeColor);
                 AppendMessage("If your phone doesn't connect, enable 'USB Debugging'.", OrangeColor);

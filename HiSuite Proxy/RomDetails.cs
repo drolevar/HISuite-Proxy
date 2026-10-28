@@ -22,36 +22,47 @@ namespace HiSuite_Proxy
             public string[] SupportedVersions = { };
         }
         public static string StaticFirmName;
-        private static string GetVersionID(string url)
+        private static string GetVersionID(string url, FirmFinder form = null)
         {
-            int where = url.IndexOf("/v");
-            if (where != -1)
+            if (url.Contains("/TDS/data/files"))
             {
-                where += 2;
-                int finish = url.IndexOf('/', where);
-                string versionid = url.Substring(where, finish - where);
-                return versionid;
+                int where = url.IndexOf("/v");
+                if (where != -1)
+                {
+                    where += 2;
+                    int finish = url.IndexOf('/', where);
+                    string versionid = url.Substring(where, finish - where);
+                    return versionid;
+                }
             }
-            else
+            if (form != null)
             {
-                if (url.Contains("update."))
-                    return null;
-                else
-                    throw new Exception("Invalid URL Passed");
+                string resolved = form.ResolveVersionId(url);
+                if (!String.IsNullOrWhiteSpace(resolved) && resolved != "Unknown" && resolved != "0")
+                    return resolved;
             }
+            if (url.Contains("update.") || url.Contains("dbankcdn.com") || url.Contains("hicloud.com"))
+                return null;
+            throw new Exception("Invalid URL Passed");
         }
 
         private static string GetPackageURL(string url)
         {
-            int where = url.IndexOf("/full/");
+            string normalizedUrl = url;
+            int where = normalizedUrl.IndexOf("/full/");
+            if (where == -1)
+            {
+                normalizedUrl = normalizedUrl.TrimEnd('/') + "/full/";
+                where = normalizedUrl.IndexOf("/full/");
+            }
             if (where != -1)
             {
                 where += 6;
                 gZipWebClient client = new gZipWebClient();
                 client.Proxy = null;
                 client.SetTimeout(10000);
-                string baseurl = url.Substring(0, where);
-                string response = client.DownloadString(baseurl + "/filelist.xml");
+                string baseurl = normalizedUrl.Substring(0, where);
+                string response = client.DownloadString(baseurl.TrimEnd('/') + "/filelist.xml");
                 where = response.IndexOf("package=");
                 if (where != -1)
                 {
@@ -79,9 +90,11 @@ namespace HiSuite_Proxy
         }
         public static void GetFirmwareDetails(FirmFinder form, string url, ref RomDetailsClass romDetails, int DetailsKind)
         {
-            string VersionID = GetVersionID(url);
+            string VersionID = GetVersionID(url, form);
             if(DetailsKind == 0 || DetailsKind == 2)
             {
+                if (String.IsNullOrWhiteSpace(VersionID))
+                    throw new Exception("For modern CDN URLs without /TDS/data/files/.../v<ID>/, enter the Version ID in the main window or Custom Base ID first.");
                 romDetails.ApprovedForInstall = ApprovedForInstallation(VersionID);
                 if (romDetails.ApprovedForInstall)
                 {

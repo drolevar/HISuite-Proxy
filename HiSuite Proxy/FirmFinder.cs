@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Windows.Forms;
 using MaterialSkin.Controls;
@@ -156,6 +156,22 @@ namespace HiSuite_Proxy
             };
         }
 
+        internal string ResolveVersionId(string url)
+        {
+            if (!String.IsNullOrWhiteSpace(materialSingleLineTextField3.Text))
+                return materialSingleLineTextField3.Text.Trim();
+            return StarterForm != null ? StarterForm.ResolveConfiguredVersionId(url) : null;
+        }
+
+        private static bool IsSupportedFirmwareUrl(string url)
+        {
+            if (String.IsNullOrWhiteSpace(url)) return false;
+            return (url.Contains("/files/p3/s15") && url.Contains("/v"))
+                || url.Contains("/download/data/")
+                || url.Contains("dbankcdn.com")
+                || url.Contains("hicloud.com");
+        }
+
         private bool checkingthread = false, checkingdetialsthread = false;
         private void materialRaisedButton1_Click(object sender, EventArgs e)
         {
@@ -165,7 +181,7 @@ namespace HiSuite_Proxy
                 return;
             }
             string url = materialSingleLineTextField1.Text;
-            if(url.Contains("/files/p3/s15") && url.Contains("/v"))
+            if(IsSupportedFirmwareUrl(url))
             {
                 Uri result;
                 if(Uri.TryCreate(url, UriKind.Absolute, out result) && ( result.Scheme == Uri.UriSchemeHttp || result.Scheme == Uri.UriSchemeHttps ))
@@ -269,7 +285,7 @@ namespace HiSuite_Proxy
                 return;
             }
             string url = materialSingleLineTextField1.Text;
-            if (url.Contains("/files/p3/s15") && url.Contains("/v"))
+            if (IsSupportedFirmwareUrl(url))
             {
                 Uri result;
                 if (Uri.TryCreate(url, UriKind.Absolute, out result) && (result.Scheme == Uri.UriSchemeHttp || result.Scheme == Uri.UriSchemeHttps))

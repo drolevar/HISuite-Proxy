@@ -1,4 +1,4 @@
-﻿namespace HiSuite_Proxy
+namespace HiSuite_Proxy
 {
     partial class Form1
     {
@@ -114,7 +114,7 @@
             this.textBox1.Name = "textBox1";
             this.textBox1.Size = new System.Drawing.Size(252, 20);
             this.textBox1.TabIndex = 1;
-            this.textBox1.Text = "http://update.dbankcdn.com/TDS/data/files/p3/s15/G5398/g1755/v386379/f1/";
+            this.textBox1.Text = "http://update.dbankcdn.com/download/data/pub_13/HWHOTA_hotaMigrate_900_9/65/v3/10dada6f3eac4a0b8712beb3cb854162/";
             // 
             // label1
             // 
@@ -242,7 +242,7 @@
             this.textBox4.Name = "textBox4";
             this.textBox4.Size = new System.Drawing.Size(252, 20);
             this.textBox4.TabIndex = 7;
-            this.textBox4.Text = "http://update.dbankcdn.com/TDS/data/files/p3/s15/G5398/g1755/v386373/f1/";
+            this.textBox4.Text = "http://update.dbankcdn.com/download/data/pub_13/HWHOTA_hotaMigrate_900_9/76/v3/92a1959e850f4748bc37cff9013d6796/";
             // 
             // label7
             // 
@@ -283,7 +283,7 @@
             this.textBox2.Name = "textBox2";
             this.textBox2.Size = new System.Drawing.Size(92, 20);
             this.textBox2.TabIndex = 2;
-            this.textBox2.Text = "BLA-LGRP2-OVS 10.0.0.158";
+            this.textBox2.Text = "BLA-LGRP2-OVS 9.1.0.300";
             // 
             // textBox5
             // 
@@ -292,7 +292,7 @@
             this.textBox5.Name = "textBox5";
             this.textBox5.Size = new System.Drawing.Size(92, 20);
             this.textBox5.TabIndex = 8;
-            this.textBox5.Text = "BLA-L29-PRELOAD 10.0.0.3(C432R1)";
+            this.textBox5.Text = "BLA-L29-PRELOAD 9.1.0.12(C432R1)";
             // 
             // checkBox3
             // 
@@ -311,7 +311,7 @@
             this.textBox6.Name = "textBox6";
             this.textBox6.Size = new System.Drawing.Size(92, 20);
             this.textBox6.TabIndex = 5;
-            this.textBox6.Text = "BLA-L29-CUST 10.0.0.4(C432)";
+            this.textBox6.Text = "BLA-L29-CUST 9.1.0.6(C432)";
             // 
             // label2
             // 
@@ -330,7 +330,7 @@
             this.textBox7.Name = "textBox7";
             this.textBox7.Size = new System.Drawing.Size(252, 20);
             this.textBox7.TabIndex = 4;
-            this.textBox7.Text = "http://update.dbankcdn.com/TDS/data/files/p3/s15/G5398/g1755/v386370/f1/";
+            this.textBox7.Text = "http://update.dbankcdn.com/download/data/pub_13/HWHOTA_hotaMigrate_900_9/a0/v3/51a0cd12010744779075e7e89e90e960/";
             // 
             // radioButton4
             // 
@@ -638,30 +638,30 @@
             // 
             // textBox11
             // 
-            this.textBox11.Enabled = false;
+            this.textBox11.Enabled = true;
             this.textBox11.Location = new System.Drawing.Point(108, 58);
             this.textBox11.Name = "textBox11";
             this.textBox11.Size = new System.Drawing.Size(94, 20);
             this.textBox11.TabIndex = 11;
-            this.textBox11.Text = "0";
+            this.textBox11.Text = "386376";
             // 
             // textBox10
             // 
-            this.textBox10.Enabled = false;
+            this.textBox10.Enabled = true;
             this.textBox10.Location = new System.Drawing.Point(108, 32);
             this.textBox10.Name = "textBox10";
             this.textBox10.Size = new System.Drawing.Size(94, 20);
             this.textBox10.TabIndex = 10;
-            this.textBox10.Text = "0";
+            this.textBox10.Text = "401404";
             // 
             // textBox9
             // 
-            this.textBox9.Enabled = false;
+            this.textBox9.Enabled = true;
             this.textBox9.Location = new System.Drawing.Point(108, 8);
             this.textBox9.Name = "textBox9";
             this.textBox9.Size = new System.Drawing.Size(94, 20);
             this.textBox9.TabIndex = 9;
-            this.textBox9.Text = "0";
+            this.textBox9.Text = "280955";
             // 
             // label8
             // 

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,6 +12,8 @@ using System.IO;
 using System.Net.Security;
 using System.Security.Cryptography;
 using System.IO.Compression;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using ProxyDiagnostics;
 
 namespace HiSuite_Proxy
@@ -182,59 +184,115 @@ namespace HiSuite_Proxy
             return TitaniumHooks.AfterResponse(Proxyserver_BeforeResponse(sender, e), e);
         }
 
+        private volatile string lastObservedHandsetCVersion = null;
+
+        internal static string NormalizeStandaloneBaseManifest(string xml)
+        {
+            if (String.IsNullOrEmpty(xml)) return xml;
+            return xml.Replace("<GROUP version=\"G1.0\"/>", "<GROUP version=\"G2.0\"/>")
+                      .Replace("<GBCINFO name=\"other\" version=\"NA\"/>", "<GBCINFO name=\"other\" version=\"GBC1.0\"/>");
+        }
+
+        private bool ShouldNormalizeStandaloneBaseManifest()
+        {
+            if (checkBox3.Checked || checkBox1.Checked) return false;
+            string cver = lastObservedHandsetCVersion;
+            if (String.IsNullOrWhiteSpace(cver)) return true;
+            // EMUI 8.x and 9.x CUST versions use G1.0/NA; EMUI 10+ (10.x, 11.x, 12.x, 101.x, 102.x) use G2.0/GBC1.0.
+            if (cver.IndexOf(" 8.", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                cver.IndexOf(" 9.", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
+            return true;
+        }
+
         private async Task Proxyserver_BeforeResponse(object sender, Titanium.Web.Proxy.EventArguments.SessionEventArgs e)
         {
             string reqeustURL = e.HttpClient.Request.Url;
 
-            if (reqeustURL.Contains("filelist.xml") &&
-                (_customData.LocalBase || _customData.LocalCust || _customData.LocalPreload))
+            if (reqeustURL.IndexOf("filelist.xml", StringComparison.OrdinalIgnoreCase) >= 0)
             {
-                if (_customData.LocalBase && FirmwarePaths.MatchesRequest(reqeustURL, textBox1.Text))
+                if (!_customData.LocalBase && basePKGData == null &&
+                    ShouldNormalizeStandaloneBaseManifest() &&
+                    FirmwarePaths.MatchesRequest(reqeustURL, textBox1.Text))
                 {
                     string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
-                    int where = response.IndexOf("package=");
-                    if (where == -1)
+                    string normalized = NormalizeStandaloneBaseManifest(response);
+                    if (!String.Equals(normalized, response, StringComparison.Ordinal))
                     {
-                        MessageBox.Show("Couldn't load base package name, please contact developer if error continues", "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                    else
-                    {
-                        where += 9;
-                        int finish = response.IndexOf('"', where);
-                        CopyFile(textBox2.Text, _customData.LocalBaseDir, response.Substring(where, finish - where), 0);
+                        e.SetResponseBodyString(normalized);
+                        Log.ObserveResponse("manifest.coupling.normalized", reqeustURL, normalized);
                     }
                 }
-                else if (_customData.LocalCust && FirmwarePaths.MatchesRequest(reqeustURL, textBox7.Text))
+                else if (_customData.LocalBase || _customData.LocalCust || _customData.LocalPreload)
                 {
-                    string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
-                    int where = response.IndexOf("package=");
-                    if (where == -1)
+                    if (_customData.LocalBase && FirmwarePaths.MatchesRequest(reqeustURL, textBox1.Text))
                     {
-                        MessageBox.Show("Couldn't load cust package name, please contact developer if error continues", "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
+                        if (ShouldNormalizeStandaloneBaseManifest())
+                        {
+                            string normalized = NormalizeStandaloneBaseManifest(response);
+                            if (!String.Equals(normalized, response, StringComparison.Ordinal))
+                            {
+                                e.SetResponseBodyString(normalized);
+                                Log.ObserveResponse("manifest.coupling.normalized", reqeustURL, normalized);
+                                response = normalized;
+                            }
+                        }
+                        int where = response.IndexOf("package=");
+                        if (where == -1)
+                        {
+                            MessageBox.Show("Couldn't load base package name, please contact developer if error continues", "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                        else
+                        {
+                            where += 9;
+                            int finish = response.IndexOf('"', where);
+                            CopyFile(textBox2.Text, _customData.LocalBaseDir, response.Substring(where, finish - where), 0);
+                        }
                     }
-                    else
+                    else if (_customData.LocalCust && FirmwarePaths.MatchesRequest(reqeustURL, textBox7.Text))
                     {
-                        where += 9;
-                        int finish = response.IndexOf('"', where);
-                        CopyFile(textBox6.Text, _customData.LocalCustDir, response.Substring(where, finish - where), 1);
+                        string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
+                        int where = response.IndexOf("package=");
+                        if (where == -1)
+                        {
+                            MessageBox.Show("Couldn't load cust package name, please contact developer if error continues", "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                        else
+                        {
+                            where += 9;
+                            int finish = response.IndexOf('"', where);
+                            CopyFile(textBox6.Text, _customData.LocalCustDir, response.Substring(where, finish - where), 1);
+                        }
                     }
-                }
-                else if (_customData.LocalPreload && FirmwarePaths.MatchesRequest(reqeustURL, textBox4.Text))
-                {
-                    string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
-                    int where = response.IndexOf("package=");
-                    if (where == -1)
+                    else if (_customData.LocalPreload && FirmwarePaths.MatchesRequest(reqeustURL, textBox4.Text))
                     {
-                        MessageBox.Show("Couldn't load preload package name, please contact developer if error continues", "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                    else
-                    {
-                        where += 9;
-                        int finish = response.IndexOf('"', where);
-                        CopyFile(textBox5.Text, _customData.LocalPreloadDir, response.Substring(where, finish - where), 2);
+                        string response = await TitaniumHooks.GetResponseBodyAsString(e, CancellationToken.None);
+                        int where = response.IndexOf("package=");
+                        if (where == -1)
+                        {
+                            MessageBox.Show("Couldn't load preload package name, please contact developer if error continues", "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                        else
+                        {
+                            where += 9;
+                            int finish = response.IndexOf('"', where);
+                            CopyFile(textBox5.Text, _customData.LocalPreloadDir, response.Substring(where, finish - where), 2);
+                        }
                     }
                 }
             }
+        }
+
+        internal string ResolveConfiguredVersionId(string url)
+        {
+            if (FirmwarePaths.MatchesRequest(url.TrimEnd('/') + "/full/filelist.xml", textBox1.Text))
+                return _customData.CustomBase ? _customData.CustomBaseID : GetURLVersion(textBox1.Text, 0);
+            if (FirmwarePaths.MatchesRequest(url.TrimEnd('/') + "/full/filelist.xml", textBox7.Text))
+                return _customData.CustomCust ? _customData.CustomCustID : GetURLVersion(textBox7.Text, 1);
+            if (FirmwarePaths.MatchesRequest(url.TrimEnd('/') + "/full/filelist.xml", textBox4.Text))
+                return _customData.CustomPreload ? _customData.CustomPreloadID : GetURLVersion(textBox4.Text, 2);
+            return GetURLVersion(url, 0);
         }
         private string GetURLVersion(string url, int type = 0)
         {
@@ -352,6 +410,8 @@ namespace HiSuite_Proxy
                                 textBox1.Text = BodyData[2];
                                 textBox2.Text = BodyData[1];
                                 textBox9.Text = BodyData[0];
+                                checkBox3.Checked = false;
+                                checkBox1.Checked = false;
                                 //Activate();
 
                                 Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
@@ -377,7 +437,7 @@ namespace HiSuite_Proxy
                     }
                     return;
                 }
-                if (reqeustURL.Contains("query.hicloud.com") || reqeustURL.Contains("/TDS/data/files") || reqeustURL.Contains("update.dbankcdn.com"))
+                if (reqeustURL.Contains("query.hicloud.com") || reqeustURL.Contains("/TDS/data/files") || reqeustURL.Contains("dbankcdn.com") || reqeustURL.Contains("hicloud.com"))
                 {
                     this.Invoke(new Action(() =>
                     {
@@ -506,8 +566,9 @@ namespace HiSuite_Proxy
                     else if (e.HttpClient.Request.HasBody)
                     {
                         string bodydata = await TitaniumHooks.GetRequestBodyAsString(e, CancellationToken.None);
-                        int whereisit = bodydata.IndexOf("PackageType");
-                        if (whereisit != -1)
+                        JObject requestJson;
+                        string pacakgetype = ExtractPackageType(bodydata, out requestJson);
+                        if (!String.IsNullOrEmpty(pacakgetype))
                         {
                             if (textBox2.Text.Length < 2)
                                 textBox2.Text = "Unknown";
@@ -515,9 +576,6 @@ namespace HiSuite_Proxy
                                 textBox6.Text = "Unknown";
                             if (textBox5.Text.Length < 2)
                                 textBox5.Text = "Unknown";
-                            whereisit += 16;
-                            int finish = bodydata.IndexOf('"', whereisit);
-                            string pacakgetype = bodydata.Substring(whereisit, finish - whereisit);
                             string opscheck = "full";
                             if (radioButton2.Checked)
                             {
@@ -535,7 +593,7 @@ namespace HiSuite_Proxy
                             {
                                 opscheck = "increment";
                             }*/
-                            if (pacakgetype == opscheck || (radioButton4.Checked && pacakgetype == "full_indicator"))
+                            if (pacakgetype == opscheck || (radioButton4.Checked && (pacakgetype == "full_indicator" || pacakgetype == "full")))
                             {
                                 string responsedata = Encoding.UTF8.GetString(Properties.Resources.responsedata).Replace("\r\n", "");
                                 /*if(checkBox9.Checked) // EMUI 7
@@ -683,6 +741,7 @@ namespace HiSuite_Proxy
                                         responsedata = responsedata.Replace("hascustpackage", "1");
                                     }
                                 }
+                                responsedata = FinalizeCheckAndAuthorizeResponse(responsedata, requestJson);
                                 Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
                                 Headers.Add("Content-Type", new HttpHeader("Content-Type", "application/json;charset=utf8"));
                                 TitaniumHooks.Ok(e, responsedata, Headers, true);
@@ -697,10 +756,9 @@ namespace HiSuite_Proxy
                         }
                     }
                 }
-                else if (reqeustURL.Contains("update.dbankcdn.com") &&
-                    ((basePKGData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox1.Text)) ||
+                else if ((basePKGData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox1.Text)) ||
                      (custPKGData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox7.Text)) ||
-                     (preloadPGKData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox4.Text))))
+                     (preloadPGKData != null && FirmwarePaths.MatchesRequest(reqeustURL, textBox4.Text)))
                 {
                     if (reqeustURL.EndsWith("filelist.xml"))
                     {
@@ -776,9 +834,187 @@ namespace HiSuite_Proxy
             return Task.CompletedTask;
         }
 
+        internal static string ExtractPackageType(string bodydata, out JObject requestJson)
+        {
+            requestJson = null;
+            if (String.IsNullOrWhiteSpace(bodydata)) return null;
+            try
+            {
+                requestJson = JObject.Parse(bodydata);
+                string packageType = (string)requestJson["commonRules"]?["PackageType"];
+                if (!String.IsNullOrEmpty(packageType)) return packageType;
+            }
+            catch
+            {
+                requestJson = null;
+            }
+            int keyIndex = bodydata.IndexOf("PackageType", StringComparison.Ordinal);
+            if (keyIndex < 0) return null;
+            int colonIndex = bodydata.IndexOf(':', keyIndex + 11);
+            if (colonIndex < 0) return null;
+            int openQuote = bodydata.IndexOf('"', colonIndex + 1);
+            if (openQuote < 0) return null;
+            int closeQuote = bodydata.IndexOf('"', openQuote + 1);
+            if (closeQuote < 0) return null;
+            return bodydata.Substring(openQuote + 1, closeQuote - openQuote - 1);
+        }
+
+        private string lastObservedDeviceId = null;
+        private string lastObservedUpdateToken = null;
+        private string lastObservedAuthVendor = null;
+        private string lastObservedImei = null;
+
+        private string FinalizeCheckAndAuthorizeResponse(string responsedata, JObject requestJson)
+        {
+            try
+            {
+                if (requestJson != null)
+                {
+                    string cver = (string)requestJson["commonRules"]?["CVersion"];
+                    if (!String.IsNullOrWhiteSpace(cver))
+                        lastObservedHandsetCVersion = cver;
+                    string devId = (string)requestJson["deviceId"];
+                    if (!String.IsNullOrWhiteSpace(devId))
+                        lastObservedDeviceId = devId;
+                    string updTok = (string)requestJson["updateToken"];
+                    if (!String.IsNullOrWhiteSpace(updTok))
+                        lastObservedUpdateToken = updTok;
+                    string vend = (string)requestJson["authVendor"];
+                    if (!String.IsNullOrWhiteSpace(vend))
+                        lastObservedAuthVendor = vend;
+                    string obsImei = (string)requestJson["commonRules"]?["IMEI"];
+                    if (!String.IsNullOrWhiteSpace(obsImei))
+                        lastObservedImei = obsImei;
+                }
+                JObject responseObj = JObject.Parse(responsedata);
+                if (responseObj["authorizeResult"] == null)
+                    responseObj["authorizeResult"] = "";
+                List<string> enabledVersionIds = new List<string>();
+                JArray results = responseObj["versionPackageCheckResults"] as JArray;
+                if (results != null)
+                {
+                    foreach (JToken token in results)
+                    {
+                        JObject item = token as JObject;
+                        if (item == null) continue;
+                        if ((string)item["status"] != "0")
+                        {
+                            item["components"] = new JArray();
+                        }
+                        else
+                        {
+                            JArray components = item["components"] as JArray;
+                            if (components != null && components.Count > 0)
+                            {
+                                JObject comp = components[0] as JObject;
+                                if (comp != null)
+                                {
+                                    if (comp["versionType"] == null)
+                                        comp["versionType"] = textBox8.Text;
+                                    string versionId = (string)comp["versionID"];
+                                    if (!String.IsNullOrWhiteSpace(versionId) && versionId != "Unknown" && versionId != "0")
+                                        enabledVersionIds.Add(versionId);
+                                }
+                            }
+                        }
+                    }
+                }
+                if (requestJson != null && enabledVersionIds.Count > 0)
+                {
+                    string inlineAuth = TryAcquireInlineAuthorization(requestJson, enabledVersionIds, enabledVersionIds.Count == 1);
+                    if (String.IsNullOrEmpty(inlineAuth) && enabledVersionIds.Count > 1)
+                    {
+                        inlineAuth = TryAcquireInlineAuthorization(requestJson, new List<string> { enabledVersionIds[0] }, true);
+                    }
+                    if (!String.IsNullOrEmpty(inlineAuth))
+                        responseObj["authorizeResult"] = inlineAuth;
+                }
+                return responseObj.ToString(Formatting.None);
+            }
+            catch (Exception error)
+            {
+                Log.ObserveException("check.and.authorize.finalize.failed", error);
+                return responsedata;
+            }
+        }
+
+        private string TryAcquireInlineAuthorization(JObject requestJson, List<string> enabledVersionIds, bool showFailureDialog = true)
+        {
+            try
+            {
+                string deviceId = (string)requestJson["deviceId"];
+                if (String.IsNullOrWhiteSpace(deviceId)) deviceId = lastObservedDeviceId;
+                string updateToken = (string)requestJson["updateToken"];
+                if (String.IsNullOrWhiteSpace(updateToken)) updateToken = lastObservedUpdateToken;
+                string vendor = (string)requestJson["authVendor"];
+                if (String.IsNullOrWhiteSpace(vendor)) vendor = lastObservedAuthVendor;
+                string ver = (string)requestJson["ver"] ?? "1";
+                string imei = (string)requestJson["commonRules"]?["IMEI"];
+                if (String.IsNullOrWhiteSpace(imei)) imei = lastObservedImei ?? "";
+                if (String.IsNullOrEmpty(deviceId) || String.IsNullOrEmpty(updateToken) || String.IsNullOrEmpty(vendor))
+                    return "";
+                JArray versions = new JArray();
+                foreach (string id in enabledVersionIds)
+                    versions.Add(new JObject { ["versionId"] = id });
+                JObject payload = new JObject
+                {
+                    ["IMEI"] = imei,
+                    ["deviceId"] = deviceId,
+                    ["updateToken"] = updateToken,
+                    ["vendor"] = vendor,
+                    ["ver"] = ver,
+                    ["version"] = versions
+                };
+                string updata = payload.ToString(Formatting.None);
+                byte[] requestBytes = Encoding.UTF8.GetBytes(updata);
+                HttpWebRequest http = (HttpWebRequest)WebRequest.Create("https://query.hicloud.com/sp_ard_common/v1/authorize.action");
+                http.Proxy = null;
+                http.Method = "POST";
+                http.ContentType = "application/json;charset=UTF-8";
+                http.UserAgent = "HiSuite";
+                http.Timeout = 10000;
+                http.ReadWriteTimeout = 10000;
+                http.ContentLength = requestBytes.Length;
+                using (Stream requestStream = http.GetRequestStream())
+                    requestStream.Write(requestBytes, 0, requestBytes.Length);
+                string responseText;
+                using (HttpWebResponse response = (HttpWebResponse)http.GetResponse())
+                using (Stream responseStream = response.GetResponseStream())
+                using (StreamReader reader = new StreamReader(responseStream, Encoding.UTF8))
+                    responseText = reader.ReadToEnd().Trim();
+                if (responseText.Length <= 2 || (showFailureDialog && !CheckAuthentication(updata, responseText)))
+                    return "";
+                string dataPart = null;
+                foreach (string part in responseText.Split('&'))
+                    if (part.StartsWith("data=", StringComparison.Ordinal))
+                        dataPart = part.Substring(5);
+                if (String.IsNullOrEmpty(dataPart))
+                    return "";
+                JObject decoded = JObject.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(dataPart)));
+                JArray approvedList = decoded["approvedVersionList"] as JArray;
+                if (approvedList == null || approvedList.Count == 0)
+                    return "";
+                foreach (JToken item in approvedList)
+                    if ((string)item["status"] != "0")
+                        return "";
+                Log.Event("inline.authorization.acquired", new JObject
+                {
+                    ["versionIds"] = new JArray(enabledVersionIds),
+                    ["status"] = "0",
+                    ["length"] = responseText.Length
+                }.ToString(Formatting.None));
+                return responseText;
+            }
+            catch (Exception error)
+            {
+                Log.ObserveException("inline.authorization.failed", error);
+                return "";
+            }
+        }
+
         private void button1_Click(object sender, EventArgs e)
         {
-            Process.Start("https://github.com/ProfessorJTJ/HISuite-Proxy/releases/download/2.3.5/Hisuite_10.1.0.550_OVE.zip");
+            Process.Start(SetUP.OfficialHiSuite14DownloadUrl);
         }
 
         public bool ReplaceComponent(string rawfile, string patchedfile, bool systemadmin = false, bool ReplaceOriginalFile = true, string NewFileDirectory = null)
@@ -824,7 +1060,7 @@ namespace HiSuite_Proxy
         private void button2_Click(object sender, EventArgs e)
         {
             OpenFileDialog dialog = new OpenFileDialog();
-            dialog.Filter = "Dynamic-link library|*.dll";
+            dialog.Filter = "HiSuite 14 or HTTP Component|HiSuite.exe;httpcomponent.dll|Dynamic-link library|*.dll|Executable|*.exe";
             dialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) + @"\HiSuite";
             if (dialog.ShowDialog() == DialogResult.OK)
             {
@@ -843,8 +1079,10 @@ namespace HiSuite_Proxy
                 if (File.Exists(runInfo) && Array.Exists(File.ReadAllLines(runInfo),
                     line => line.Trim().StartsWith("version=14.", StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (!Path.GetFileName(filename).Equals("httpcomponent.dll", StringComparison.OrdinalIgnoreCase))
-                        throw new InvalidOperationException("Select httpcomponent.dll from the HiSuite directory.");
+                    string selectedFile = Path.GetFileName(filename);
+                    if (!selectedFile.Equals("httpcomponent.dll", StringComparison.OrdinalIgnoreCase) &&
+                        !selectedFile.Equals("HiSuite.exe", StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("Select HiSuite.exe or httpcomponent.dll from the HiSuite 14 directory.");
                     HiSuite14PatchStatus status = HiSuite14Patcher.Apply(directory);
                     if (!systemadmin)
                         MessageBox.Show(status.Message, "HiSuite 14", MessageBoxButtons.OK, MessageBoxIcon.Information);

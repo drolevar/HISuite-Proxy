@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Titanium.Web.Proxy.EventArguments;
 using Titanium.Web.Proxy.Models;
@@ -94,17 +97,32 @@ namespace ProxyDiagnostics
             Log.ObserveRequest("preview.rollback.trigger", uri.AbsoluteUri, body);
             try
             {
+                string mode = (string)config["mode"] ?? "metadata-preview-no-install";
                 string offer = File.ReadAllText((string)config["offerFile"]);
                 JObject candidate = JObject.Parse(offer);
-                if ((string)candidate["status"] != "0" || candidate["authorizeResult"] == null || candidate["authorizeResult"].Type != JTokenType.String || (string)candidate["authorizeResult"] != "")
-                    throw new InvalidDataException("Expected the explicitly unauthorised empty-string format probe.");
-                JArray results = candidate["versionPackageCheckResults"] as JArray;
-                if (results == null || results.Count != 3) throw new InvalidDataException("Expected exactly three preview components.");
-                string[] ids = { "401403", "401404", "386376" };
-                for (int index = 0; index < results.Count; index++)
-                    if ((int)results[index]["versionPackageType"] != index + 2 || (string)results[index]["components"][0]["versionID"] != ids[index])
-                        throw new InvalidDataException("Unexpected preview package IDs.");
-                Reply(session, "preview.local.rollback.offer", offer, 200, "application/json;charset=utf-8");
+                if (mode == "live-authorized-preview-no-install")
+                {
+                    string versionId = (string)config["authorizedVersionId"] ?? "280955";
+                    JArray results = candidate["versionPackageCheckResults"] as JArray;
+                    if ((string)candidate["status"] != "0" || results == null || results.Count < 1 ||
+                        (int)results[0]["versionPackageType"] != 2 || (string)results[0]["components"]?[0]?["versionID"] != versionId)
+                        throw new InvalidDataException("Unexpected live-authorized preview offer structure.");
+                    string liveAuth = QueryLiveAuthorization(request, versionId);
+                    candidate["authorizeResult"] = liveAuth;
+                    Reply(session, "preview.live.authorized.rollback.offer", candidate.ToString(Formatting.None), 200, "application/json;charset=utf-8");
+                }
+                else
+                {
+                    if ((string)candidate["status"] != "0" || candidate["authorizeResult"] == null || candidate["authorizeResult"].Type != JTokenType.String || (string)candidate["authorizeResult"] != "")
+                        throw new InvalidDataException("Expected the explicitly unauthorised empty-string format probe.");
+                    JArray results = candidate["versionPackageCheckResults"] as JArray;
+                    if (results == null || results.Count != 3) throw new InvalidDataException("Expected exactly three preview components.");
+                    string[] ids = { "401403", "401404", "386376" };
+                    for (int index = 0; index < results.Count; index++)
+                        if ((int)results[index]["versionPackageType"] != index + 2 || (string)results[index]["components"][0]["versionID"] != ids[index])
+                            throw new InvalidDataException("Unexpected preview package IDs.");
+                    Reply(session, "preview.local.rollback.offer", offer, 200, "application/json;charset=utf-8");
+                }
             }
             catch (Exception error)
             {
@@ -112,6 +130,63 @@ namespace ProxyDiagnostics
                 Reply(session, "preview.offer.denied", "{\"status\":\"-1\"}", 503, "application/json");
             }
             return true;
+        }
+
+        private static string QueryLiveAuthorization(JObject request, string versionId)
+        {
+            string deviceId = (string)request["deviceId"];
+            string updateToken = (string)request["updateToken"];
+            string vendor = (string)request["authVendor"];
+            string ver = (string)request["ver"] ?? "1";
+            string imei = (string)request["commonRules"]?["IMEI"] ?? "";
+            if (String.IsNullOrEmpty(deviceId) || String.IsNullOrEmpty(updateToken) || String.IsNullOrEmpty(vendor))
+                throw new InvalidDataException("Incoming CheckAndAuthorize request is missing device authorization fields.");
+            JObject payload = new JObject
+            {
+                ["IMEI"] = imei,
+                ["deviceId"] = deviceId,
+                ["updateToken"] = updateToken,
+                ["vendor"] = vendor,
+                ["ver"] = ver,
+                ["version"] = new JArray(new JObject { ["versionId"] = versionId })
+            };
+            byte[] requestBytes = Encoding.UTF8.GetBytes(payload.ToString(Formatting.None));
+            HttpWebRequest http = (HttpWebRequest)WebRequest.Create("https://query.hicloud.com/sp_ard_common/v1/authorize.action");
+            http.Proxy = null;
+            http.Method = "POST";
+            http.ContentType = "application/json;charset=UTF-8";
+            http.UserAgent = "HiSuite";
+            http.Timeout = 10000;
+            http.ReadWriteTimeout = 10000;
+            http.ContentLength = requestBytes.Length;
+            using (Stream requestStream = http.GetRequestStream())
+                requestStream.Write(requestBytes, 0, requestBytes.Length);
+            string responseText;
+            using (HttpWebResponse response = (HttpWebResponse)http.GetResponse())
+            using (Stream responseStream = response.GetResponseStream())
+            using (StreamReader reader = new StreamReader(responseStream, Encoding.UTF8))
+                responseText = reader.ReadToEnd().Trim();
+            string dataPart = null;
+            foreach (string part in responseText.Split('&'))
+                if (part.StartsWith("data=", StringComparison.Ordinal))
+                    dataPart = part.Substring(5);
+            if (String.IsNullOrEmpty(dataPart))
+                throw new InvalidDataException("Huawei v1/authorize.action did not return a signed data= form envelope.");
+            JObject decoded = JObject.Parse(Encoding.UTF8.GetString(Convert.FromBase64String(dataPart)));
+            JToken approved = decoded["approvedVersionList"]?[0];
+            string status = (string)approved?["status"];
+            string approvedId = (string)approved?["versionId"];
+            string versionNumber = (string)approved?["versionNumber"];
+            if (approvedId != versionId || status != "0")
+                throw new InvalidDataException("Huawei v1/authorize.action did not approve version " + versionId + " (status=" + status + ").");
+            Log.Event("preview.live.authorization.acquired", new JObject
+            {
+                ["versionId"] = approvedId,
+                ["status"] = status,
+                ["versionNumber"] = versionNumber,
+                ["length"] = responseText.Length
+            }.ToString(Formatting.None));
+            return responseText;
         }
 
         private static void Reply(SessionEventArgs session, string stage, string body, int status, string contentType)

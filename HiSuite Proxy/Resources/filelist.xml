@@ -4,7 +4,15 @@
 <compress>0</compress>
 </component>
 <maxStashInfo>52428800</maxStashInfo>
+<supportPKI>0</supportPKI>
 <vendorInfo logfile="changelog.xml" name="firmkind" package="firmfile" precut_size="0" subpath=""/>
+<GROUP version="G2.0"/>
+<GBC>
+<GBCINFO name="other" version="GBC1.0"/>
+</GBC>
+<GBP>
+<GBPINFO name="other" version="NA"/>
+</GBP>
 <files>
 <file>
 <spath>firmfile</spath>
