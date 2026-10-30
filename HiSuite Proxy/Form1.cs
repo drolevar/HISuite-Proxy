@@ -69,6 +69,18 @@ namespace HiSuite_Proxy
             InitializeComponent();
             if (Environment.GetEnvironmentVariable("HISUITE_PROXY_FIXED_OFFER_PREVIEW") == "1")
                 Text = "HiSuite Proxy - METADATA PREVIEW - downloads blocked";
+            string osTypeEnv = Environment.GetEnvironmentVariable("HISUITE_PROXY_OS_TYPE");
+            if (!String.IsNullOrWhiteSpace(osTypeEnv))
+            {
+                if (osTypeEnv.Equals("recovery", StringComparison.OrdinalIgnoreCase))
+                    radioButton4.Checked = true;
+                else if (osTypeEnv.Equals("rollback", StringComparison.OrdinalIgnoreCase))
+                    radioButton3.Checked = true;
+                else if (osTypeEnv.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                    radioButton2.Checked = true;
+                else if (osTypeEnv.Equals("normal", StringComparison.OrdinalIgnoreCase))
+                    radioButton1.Checked = true;
+            }
             Log.Event("session.entry", "Proxy source build with redacted file diagnostics.");
             Log.Checkpoint(this, "ui.ready");
 
@@ -379,46 +391,36 @@ namespace HiSuite_Proxy
                         string[] BodyData = Body.Split('|');
                         if(BodyData.Length > 2)
                         {
-                            if (BodyData[1].Contains("-PRELOAD "))
+                            string origin = e.HttpClient.Request.Headers.Headers.ContainsKey("Origin") ? e.HttpClient.Request.Headers.Headers["Origin"].Value : "http://localhost";
+                            this.Invoke(new Action(() =>
                             {
-                                textBox4.Text = BodyData[2];
-                                textBox5.Text = BodyData[1];
-                                textBox11.Text = BodyData[0];
-                                checkBox1.Checked = true;
-                                //Activate();
-
-                                Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
-                                Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
-                                Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                                TitaniumHooks.Ok(e, "OK", Headers);
-                            }
-                            else if (BodyData[1].Contains("-CUST "))
-                            {
-                                textBox7.Text = BodyData[2];
-                                textBox6.Text = BodyData[1];
-                                textBox10.Text = BodyData[0];
-                                checkBox3.Checked = true;
-                                //Activate();
-
-                                Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
-                                Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
-                                Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                                TitaniumHooks.Ok(e, "OK", Headers);
-                            }
-                            else
-                            {
-                                textBox1.Text = BodyData[2];
-                                textBox2.Text = BodyData[1];
-                                textBox9.Text = BodyData[0];
-                                checkBox3.Checked = false;
-                                checkBox1.Checked = false;
-                                //Activate();
-
-                                Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
-                                Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", e.HttpClient.Request.Headers.Headers["Origin"].Value));
-                                Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
-                                TitaniumHooks.Ok(e, "OK", Headers);
-                            }
+                                if (BodyData[1].Contains("-PRELOAD "))
+                                {
+                                    textBox4.Text = BodyData[2];
+                                    textBox5.Text = BodyData[1];
+                                    textBox11.Text = BodyData[0];
+                                    checkBox1.Checked = true;
+                                }
+                                else if (BodyData[1].Contains("-CUST "))
+                                {
+                                    textBox7.Text = BodyData[2];
+                                    textBox6.Text = BodyData[1];
+                                    textBox10.Text = BodyData[0];
+                                    checkBox3.Checked = true;
+                                }
+                                else
+                                {
+                                    textBox1.Text = BodyData[2];
+                                    textBox2.Text = BodyData[1];
+                                    textBox9.Text = BodyData[0];
+                                    checkBox3.Checked = false;
+                                    checkBox1.Checked = false;
+                                }
+                            }));
+                            Dictionary<string, HttpHeader> Headers = new Dictionary<string, HttpHeader>();
+                            Headers.Add("Access-Control-Allow-Origin", new HttpHeader("Access-Control-Allow-Origin", origin));
+                            Headers.Add("Content-Type", new HttpHeader("Content-Type", "text/plain"));
+                            TitaniumHooks.Ok(e, "OK", Headers);
                         }
                         else
                         {
@@ -463,7 +465,7 @@ namespace HiSuite_Proxy
                 {
                     TitaniumHooks.Ok(e, "Success");
                 }
-                else if (reqeustURL.Contains("query.hicloud.com"))
+                else if (reqeustURL.Contains("query.hicloud.com") || reqeustURL.Contains("update.hicloud.com/sp_ard_common"))
                 {
                     if (reqeustURL.Contains("CheckNewVersion.aspx"))
                     {
